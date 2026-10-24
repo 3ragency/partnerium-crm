@@ -1,0 +1,150 @@
+name: ${COOLIFY_RESOURCE_UUID:-partnerium-crm}
+
+x-twenty-environment: &twenty-environment
+  NODE_ENV: production
+  SERVER_URL: ${SERVER_URL:-https://crm.partnerium.app}
+  PG_DATABASE_URL: postgres://postgres:${PG_DATABASE_PASSWORD:-}@partnerium-crm-db:5432/twenty
+  REDIS_URL: redis://partnerium-crm-redis:6379
+  STORAGE_TYPE: local
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+  APP_SECRET: ${APP_SECRET:-}
+  IS_MULTIWORKSPACE_ENABLED: 'false'
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+services:
+  server:
+    image: partnerium-crm:${SOURCE_COMMIT:?SOURCE_COMMIT_required}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: packages/twenty-docker/twenty/Dockerfile
+      target: twenty
+      args:
+        APP_VERSION: v2.51.0
+    container_name: ${COOLIFY_RESOURCE_UUID:-partnerium-crm}-server
+    init: true
+    restart: unless-stopped
+    environment:
+      <<: *twenty-environment
+      NODE_PORT: '3000'
+    ports:
+      - 127.0.0.1:13000:3000
+    volumes:
+      - crm-files:/app/packages/twenty-server/.local-storage
+    networks:
+      - private
+      - coolify
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://localhost:3000/healthz]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 180s
+    stop_grace_period: 60s
+    logging: *logging
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.services.partnerium-crm-source.loadbalancer.server.port=3000
+      - traefik.http.routers.partnerium-crm-source-http.rule=Host(`crm.partnerium.app`)
+      - traefik.http.routers.partnerium-crm-source-http.entrypoints=http
+      - traefik.http.routers.partnerium-crm-source-http.middlewares=partnerium-crm-source-https
+      - traefik.http.middlewares.partnerium-crm-source-https.redirectscheme.scheme=https
+      - traefik.http.routers.partnerium-crm-source.rule=Host(`crm.partnerium.app`)
+      - traefik.http.routers.partnerium-crm-source.entrypoints=https
+      - traefik.http.routers.partnerium-crm-source.tls=true
+      - traefik.http.routers.partnerium-crm-source.tls.certresolver=letsencrypt
+      - traefik.http.routers.partnerium-crm-source.service=partnerium-crm-source
+      - coolify.name=server-${COOLIFY_RESOURCE_UUID:-partnerium-crm}
+
+  worker:
+    image: partnerium-crm:${SOURCE_COMMIT:?SOURCE_COMMIT_required}
+    pull_policy: never
+    container_name: ${COOLIFY_RESOURCE_UUID:-partnerium-crm}-worker
+    init: true
+    restart: unless-stopped
+    command: [yarn, worker:prod]
+    environment:
+      <<: *twenty-environment
+      DISABLE_DB_MIGRATIONS: 'true'
+      DISABLE_CRON_JOBS_REGISTRATION: 'true'
+    volumes:
+      - crm-files:/app/packages/twenty-server/.local-storage
+    networks:
+      - private
+    depends_on:
+      server:
+        condition: service_healthy
+    stop_grace_period: 90s
+    logging: *logging
+    labels:
+      - coolify.name=worker-${COOLIFY_RESOURCE_UUID:-partnerium-crm}
+
+  db:
+    image: postgres:16
+    container_name: ${COOLIFY_RESOURCE_UUID:-partnerium-crm}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: twenty
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_DATABASE_PASSWORD:-}
+    volumes:
+      - crm-postgres:/var/lib/postgresql/data
+    networks:
+      private:
+        aliases: [partnerium-crm-db]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres -d twenty']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    stop_grace_period: 60s
+    logging: *logging
+    labels:
+      - coolify.name=db-${COOLIFY_RESOURCE_UUID:-partnerium-crm}
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: ${COOLIFY_RESOURCE_UUID:-partnerium-crm}-redis
+    restart: unless-stopped
+    command: [redis-server, --maxmemory-policy, noeviction]
+    volumes:
+      - crm-redis:/data
+    networks:
+      private:
+        aliases: [partnerium-crm-redis]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+    labels:
+      - coolify.name=redis-${COOLIFY_RESOURCE_UUID:-partnerium-crm}
+
+networks:
+  private: {}
+  coolify:
+    external: true
+
+# Existing production data must not be silently replaced with empty volumes.
+volumes:
+  crm-postgres:
+    external: true
+    name: msw4w8k0ow4gwkcw4ckcw840_db-data
+  crm-files:
+    external: true
+    name: msw4w8k0ow4gwkcw4ckcw840_server-local-data
+  crm-redis:
+    external: true
+    name: 7f8484d19977e0d0c575111b6c3c2f2bd8be41d531f1b38ee97833d1f096d4a0
