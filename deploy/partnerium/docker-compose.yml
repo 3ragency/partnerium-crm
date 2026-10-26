@@ -8,6 +8,12 @@ x-twenty-environment: &twenty-environment
   STORAGE_TYPE: local
   ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
   APP_SECRET: ${APP_SECRET:-}
+  AI_PROVIDERS: ${AI_PROVIDERS:-{}}
+  AI_MODELS_DEFAULT_EXTRA_FAST: ${AI_MODELS_DEFAULT_EXTRA_FAST:-[]}
+  AI_MODELS_DEFAULT_FAST: ${AI_MODELS_DEFAULT_FAST:-[]}
+  AI_MODELS_DEFAULT_BALANCED: ${AI_MODELS_DEFAULT_BALANCED:-[]}
+  AI_MODELS_DEFAULT_SMART: ${AI_MODELS_DEFAULT_SMART:-[]}
+  AI_MODELS_DEFAULT_EXTRA_SMART: ${AI_MODELS_DEFAULT_EXTRA_SMART:-[]}
   IS_MULTIWORKSPACE_ENABLED: 'false'
 
 x-logging: &logging
@@ -131,6 +137,57 @@ services:
     logging: *logging
     labels:
       - coolify.name=redis-${COOLIFY_RESOURCE_UUID:-partnerium-crm}
+
+  codex:
+    image: partnerium-codex:${SOURCE_COMMIT:?SOURCE_COMMIT_required}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: deploy/partnerium/codex/Dockerfile
+    container_name: ${COOLIFY_RESOURCE_UUID:-partnerium-crm}-codex
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 128
+    environment:
+      CRM_ORIGIN: ${SERVER_URL:-https://crm.partnerium.app}
+    volumes:
+      - type: bind
+        source: /opt/partnerium-crm/codex/bin/codex
+        target: /usr/local/bin/codex
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /opt/partnerium-crm/codex/auth
+        target: /auth
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /opt/partnerium-crm/codex/bridge-token
+        target: /run/secrets/bridge-token
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,uid=1000,gid=1000
+    networks:
+      private:
+        aliases: [partnerium-codex]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 15s
+    logging: *logging
+    labels:
+      - coolify.name=codex-${COOLIFY_RESOURCE_UUID:-partnerium-crm}
 
 networks:
   private: {}
