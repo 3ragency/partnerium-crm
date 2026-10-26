@@ -226,6 +226,7 @@ export class SdkProviderFactoryService {
     const provider = createOpenAICompatible({
       name: config.name ?? 'openai-compatible',
       baseURL: config.baseUrl,
+      supportsStructuredOutputs: config.supportsStructuredOutputs,
       ...(config.apiKey && { apiKey: config.apiKey }),
     });
 

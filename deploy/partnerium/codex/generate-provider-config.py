@@ -27,6 +27,7 @@ console.log(JSON.stringify(await response.json()));
         'name': 'codex',
         'label': 'Codex · ChatGPT subscription',
         'baseUrl': 'http://partnerium-codex:3001/v1',
+        'supportsStructuredOutputs': True,
         'apiKey': token,
         'models': [{
             'name': model['id'], 'label': model['name'] + ' · Codex',

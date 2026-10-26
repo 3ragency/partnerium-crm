@@ -124,6 +124,8 @@ python3 deploy/partnerium/codex/generate-provider-config.py ucgo44ckc000gksggswo
 содержит только пустые шаблоны. Ключ не является OpenAI API key; расход идёт
 через авторизованный CLI. Каталог берётся из установленной версии Codex;
 наличие модели в каталоге само по себе не гарантирует доступ аккаунта.
+Провайдер включает `supportsStructuredOutputs`, чтобы SDK передавал JSON-схемы
+для структурированных ответов и исправления аргументов инструментов.
 
 Мост не публикует порт и не подключён к Traefik. Контейнер работает от uid 1000
 с read-only root filesystem, без Linux capabilities и повышения привилегий.

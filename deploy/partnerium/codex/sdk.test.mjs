@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { generateText, streamText, tool, jsonSchema, isStepCount } from 'ai';
+import {
+  generateText,
+  streamText,
+  tool,
+  jsonSchema,
+  isStepCount,
+  Output,
+} from 'ai';
+import { z } from 'zod';
 
 import { CodexClient } from './codex-client.mjs';
 import { createBridge } from './server.mjs';
@@ -22,6 +30,7 @@ before(async () => {
     name: 'codex',
     baseURL: `http://127.0.0.1:${server.address().port}/v1`,
     apiKey: token,
+    supportsStructuredOutputs: true,
   });
 });
 after(async () => {
@@ -85,4 +94,15 @@ test('the CRM SDK rejects a partial stream that ends without success', async () 
   });
 
   await assert.rejects(chat.text);
+});
+
+test('structured responses used by tool-call repair keep the requested schema', async () => {
+  const result = await generateText({
+    model: provider('test-model'),
+    prompt: 'Generate a title',
+    output: Output.object({ schema: z.object({ title: z.string() }) }),
+    maxRetries: 0,
+  });
+
+  assert.deepEqual(result.output, { title: 'Hello' });
 });
